@@ -104,3 +104,55 @@ test('restore registra cerradas sin lanzar; remove emite removed', () => {
   expect(ids).toEqual(['x']);
   expect(m.list()).toEqual([]);
 });
+
+function throwingSetup(tmp: string, state: { fail: boolean; killFails?: boolean }) {
+  const spawn: Spawn = () => {
+    if (state.fail) throw new Error('spawn falló');
+    return {
+      onData: () => {},
+      onExit: () => {},
+      write: () => {},
+      resize: () => {},
+      kill: () => {
+        if (state.killFails) throw new Error('kill falló');
+      },
+    };
+  };
+  return new SessionManager({ spawn, hooksPath: 'h.json', port: 1, token: 't', claudeBin: 'c', shell: 's' });
+}
+
+test('create con spawn que lanza no deja sesión fantasma', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'colmena-'));
+  const m = throwingSetup(tmp, { fail: true });
+  const seen: unknown[] = [];
+  m.on('session', (s) => seen.push(s));
+  expect(() => m.create('claude', tmp)).toThrow('spawn falló');
+  expect(m.list()).toEqual([]);
+  expect(seen).toEqual([]);
+});
+
+test('resume con spawn que lanza deja cerrado, emite y relanza', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'colmena-'));
+  const m = throwingSetup(tmp, { fail: false });
+  m.restore([{ id: 'x', kind: 'claude', cwd: tmp }]);
+  const state = (m as any).opts as any;
+  const seen: string[] = [];
+  m.on('session', (s) => seen.push(s.status));
+  state.spawn = () => {
+    throw new Error('spawn falló');
+  };
+  expect(() => m.resume('x')).toThrow('spawn falló');
+  expect(m.list()[0]).toMatchObject({ status: 'cerrado', exitCode: null });
+  expect(seen).toContain('cerrado');
+});
+
+test('remove y close con kill que lanza no propagan y remove emite removed', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'colmena-'));
+  const m = throwingSetup(tmp, { fail: false, killFails: true });
+  const a = m.create('terminal', tmp);
+  const ids: string[] = [];
+  m.on('removed', (id) => ids.push(id));
+  expect(() => m.close(a.id)).not.toThrow();
+  expect(() => m.remove(a.id)).not.toThrow();
+  expect(ids).toEqual([a.id]);
+});

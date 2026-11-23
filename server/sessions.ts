@@ -56,8 +56,8 @@ export class SessionManager extends EventEmitter {
       pty: null,
       buffer: new RingBuffer(200_000),
     };
+    this.launch(entry, false); // si spawn lanza, la sesión no se registra
     this.sessions.set(id, entry);
-    this.launch(entry, false);
     this.emitSession(entry);
     return { ...entry.info };
   }
@@ -69,7 +69,13 @@ export class SessionManager extends EventEmitter {
     if (entry.info.status !== 'cerrado') throw new Error('La sesión no está cerrada');
     entry.info.status = 'iniciando';
     entry.info.exitCode = null;
-    this.launch(entry, true);
+    try {
+      this.launch(entry, true);
+    } catch (e) {
+      entry.info.status = 'cerrado';
+      this.emitSession(entry);
+      throw e;
+    }
     this.emitSession(entry);
     return { ...entry.info };
   }
@@ -109,7 +115,9 @@ export class SessionManager extends EventEmitter {
     const entry = this.sessions.get(id);
     if (!entry) return;
     if (entry.pty) {
-      entry.pty.kill();
+      try {
+        entry.pty.kill();
+      } catch {}
     } else if (entry.info.status !== 'cerrado') {
       entry.info.status = 'cerrado';
       this.emitSession(entry);
@@ -120,7 +128,9 @@ export class SessionManager extends EventEmitter {
     const entry = this.sessions.get(id);
     if (!entry) return;
     this.sessions.delete(id);
-    entry.pty?.kill();
+    try {
+      entry.pty?.kill();
+    } catch {}
     entry.pty = null;
     this.emit('removed', id);
   }
