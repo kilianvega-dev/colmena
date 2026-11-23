@@ -11,6 +11,7 @@ export function useColmena() {
   const [connected, setConnected] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
+  const errTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const listeners = useRef(new Map<string, Set<Listener>>());
   // El replay llega antes de que el Panel exista: se guarda para entregarlo al suscribirse.
   const buffers = useRef(new Map<string, string>());
@@ -52,6 +53,8 @@ export function useColmena() {
             break;
           case 'error':
             setLastError(m.message);
+            clearTimeout(errTimer.current);
+            errTimer.current = setTimeout(() => setLastError(null), 6000);
             break;
         }
       };
@@ -74,5 +77,7 @@ export function useColmena() {
     return () => { mine.delete(cb); };
   }, []);
 
-  return { sessions, order, recents, connected, send, subscribe, lastError };
+  const dismissError = useCallback(() => { clearTimeout(errTimer.current); setLastError(null); }, []);
+
+  return { sessions, order, recents, connected, send, subscribe, lastError, dismissError };
 }

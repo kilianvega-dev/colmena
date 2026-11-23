@@ -12,7 +12,7 @@ function rowsOf<T>(items: T[]): T[][] {
 }
 
 export function App() {
-  const { sessions, order, connected, send, subscribe, lastError } = useColmena();
+  const { sessions, order, connected, send, subscribe, lastError, dismissError } = useColmena();
 
   useEffect(() => {
     if (import.meta.env.DEV) (window as unknown as { colmena: unknown }).colmena = { send };
@@ -26,8 +26,9 @@ export function App() {
   return (
     <div className="flex h-full flex-col">
       {(!connected || lastError) && (
-        <div className="bg-red-900 px-3 py-1 text-sm">
-          {!connected ? 'Sin conexión con el servidor, reintentando…' : lastError}
+        <div className="flex items-center bg-red-900 px-3 py-1 text-sm">
+          <span className="flex-1">{!connected ? 'Sin conexión con el servidor, reintentando…' : lastError}</span>
+          {connected && <button aria-label="Cerrar aviso" className="px-2" onClick={dismissError}>×</button>}
         </div>
       )}
       {rows.length === 0 ? (

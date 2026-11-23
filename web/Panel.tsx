@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import type { ClientMessage, SessionInfo, SessionStatus } from '../server/protocol.ts';
+import type { ClientMessage, SessionInfo } from '../server/protocol.ts';
 
-const STATUS_COLOR: Record<SessionStatus, string> = {
+const STATUS_COLOR: Record<string, string> = {
+  abierta: 'bg-emerald-600',
+  cerrada: 'bg-red-700',
   iniciando: 'bg-sky-600',
   trabajando: 'bg-amber-600',
   esperando: 'bg-emerald-600',
@@ -31,10 +33,13 @@ export function Panel({ session, send, subscribe }: Props) {
       term.write(data);
     });
     const onData = term.onData((data) => send({ type: 'input', id, data }));
+    let cols = 0, rows = 0;
     const ro = new ResizeObserver(() => {
       try {
         fit.fit();
-        send({ type: 'resize', id, cols: term.cols, rows: term.rows });
+        if (term.cols === cols && term.rows === rows) return;
+        ({ cols, rows } = term);
+        send({ type: 'resize', id, cols, rows });
       } catch { /* panel sin tamaño todavía */ }
     });
     ro.observe(box.current!);
@@ -42,6 +47,7 @@ export function Panel({ session, send, subscribe }: Props) {
   }, [id, send, subscribe]);
 
   const name = cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
+  const label = kind === 'terminal' ? (status === 'cerrado' ? 'cerrada' : 'abierta') : status;
   const btn = 'rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700';
 
   return (
@@ -49,7 +55,7 @@ export function Panel({ session, send, subscribe }: Props) {
       <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm">
         <span className="truncate font-medium" title={cwd}>{name}</span>
         <span className="text-neutral-400">{kind === 'claude' ? 'Claude' : 'Terminal'}</span>
-        <span className={`rounded px-2 py-0.5 text-xs text-white ${STATUS_COLOR[status]}`}>{status}</span>
+        <span className={`rounded px-2 py-0.5 text-xs text-white ${STATUS_COLOR[label]}`}>{label}</span>
         <span className="flex-1" />
         {status === 'cerrado' && kind === 'claude' && (
           <button className={btn} onClick={() => send({ type: 'resume', id })}>Reanudar</button>
@@ -65,7 +71,9 @@ export function Panel({ session, send, subscribe }: Props) {
         <button className={btn} onClick={() => send({ type: 'close', id })}>Cerrar</button>
         <button className={btn} onClick={() => send({ type: 'remove', id })}>Quitar</button>
       </div>
-      <div ref={box} className="min-h-0 flex-1 bg-neutral-950 p-1" />
+      <div className="relative min-h-0 min-w-0 flex-1 bg-neutral-950">
+        <div ref={box} className="absolute inset-0" />
+      </div>
     </div>
   );
 }
