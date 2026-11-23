@@ -14,7 +14,8 @@ function runRelay(port: number | string, stdin: string) {
   return new Promise<{ code: number | null; out: string; ms: number }>((resolve) => {
     const t0 = Date.now();
     const p = spawn(process.execPath, [relay], {
-      env: { ...process.env, COLMENA_PORT: String(port), COLMENA_TOKEN: 'tok' },
+      // COLMENA_SESSION fijo: dentro de una terminal de Colmena el entorno ya trae uno
+      env: { ...process.env, COLMENA_PORT: String(port), COLMENA_TOKEN: 'tok', COLMENA_SESSION: '' },
     });
     let out = '';
     p.stdout.on('data', (d) => (out += d));

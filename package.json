@@ -33,5 +33,6 @@
     "build": "vite build",
     "start": "vite build && node server/index.ts",
     "dev": "concurrently -n server,web \"node --env-file=.env.dev --watch server/index.ts\" \"vite\""
-  }
+  },
+  "license": "MIT"
 }
