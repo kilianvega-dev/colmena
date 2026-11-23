@@ -30,7 +30,9 @@ const manager = new SessionManager({
 manager.restore(state.sessions);
 
 const staticDir = join(import.meta.dirname, '..', 'dist');
-const srv = await createServer({
+let srv: Awaited<ReturnType<typeof createServer>>;
+try {
+  srv = await createServer({
   manager,
   port,
   token,
@@ -38,12 +40,21 @@ const srv = await createServer({
   devPort: process.env.COLMENA_DEV === '1' ? 5173 : undefined,
   stateFile,
   recents: state.recents,
+  order: state.order,
 });
+} catch (e) {
+  if ((e as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw e;
+  console.error(`El puerto ${port} ya está en uso. Cambia COLMENA_PORT.`);
+  process.exit(1);
+}
 console.log(`Colmena en http://127.0.0.1:${srv.port}`);
 
+let closing = false;
 const shutdown = async () => {
+  if (closing) return;
+  closing = true;
   manager.killAll();
-  await srv.close(); // también guarda el estado // guarda el estado pendiente
+  await srv.close(); // también guarda el estado
   process.exit(0);
 };
 process.on('SIGINT', shutdown);

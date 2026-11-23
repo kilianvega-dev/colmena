@@ -18,6 +18,7 @@ interface Opts {
   devPort?: number;
   stateFile: string;
   recents: string[];
+  order?: string[];
 }
 
 const TYPES: Record<string, string> = {
@@ -33,10 +34,12 @@ const TYPES: Record<string, string> = {
 export async function createServer(opts: Opts): Promise<{ close(): Promise<void>; port: number }> {
   const { manager, token, staticDir, devPort, stateFile } = opts;
   let recents = opts.recents;
-  let order: string[] = manager.list().map((s) => s.id);
+  const ids = manager.list().map((s) => s.id);
+  const saved = (opts.order ?? []).filter((id) => ids.includes(id));
+  let order: string[] = [...saved, ...ids.filter((id) => !saved.includes(id))];
   let port = opts.port;
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const send = (ws: WebSocket, m: ServerMessage) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
   };
@@ -46,7 +49,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
   let timer: NodeJS.Timeout | null = null;
   const persist = async () => {
     const sessions = manager.list().map(({ id, kind, cwd }) => ({ id, kind, cwd }));
-    await saveState(stateFile, { sessions, order, recents }).catch(() => {});
+    await saveState(stateFile, { sessions, order, recents }).catch((e) => console.error('No se pudo guardar el estado:', e));
   };
   const schedule = () => {
     timer ??= setTimeout(() => {
@@ -181,7 +184,10 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
-  await new Promise<void>((res) => server.listen(opts.port, '127.0.0.1', res));
+  await new Promise<void>((res, rej) => {
+    server.once('error', rej);
+    server.listen(opts.port, '127.0.0.1', res);
+  });
   port = (server.address() as AddressInfo).port;
 
   return {

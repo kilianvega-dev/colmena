@@ -111,3 +111,29 @@ test('create con carpeta inexistente: error solo a ese cliente', async () => {
   await new Promise((r) => setTimeout(r, 50));
   expect(b.msgs.some((m) => m.type === 'error')).toBe(false);
 });
+
+test('el orden guardado se respeta, filtra fantasmas y añade faltantes', async () => {
+  const { manager, tmp } = await setup();
+  const m2 = new SessionManager({ spawn: (() => { throw new Error('x'); }) as Spawn, hooksPath: 'h', port: 0, token: TOKEN, claudeBin: 'c', shell: 's' });
+  m2.restore([{ id: 'A', kind: 'terminal', cwd: tmp }, { id: 'B', kind: 'terminal', cwd: tmp }, { id: 'C', kind: 'terminal', cwd: tmp }]);
+  const srv = await createServer({ manager: m2, port: 0, token: TOKEN, staticDir: null, stateFile: join(tmp, 'o.json'), recents: [], order: ['B', 'A', 'ghost'] });
+  cleanups.push(srv.close);
+  const c = await client(srv.port);
+  const snap = await c.waitFor((m) => m.type === 'snapshot');
+  expect(snap.order).toEqual(['B', 'A', 'C']);
+  void manager;
+});
+
+test('upgrade con Host ajeno se rechaza', async () => {
+  const { srv } = await setup();
+  const ws = new WebSocket(`ws://127.0.0.1:${srv.port}/ws`, { origin: `http://127.0.0.1:${srv.port}`, headers: { host: `evil.com:${srv.port}` } });
+  await new Promise<void>((res, rej) => {
+    ws.once('open', () => rej(new Error('abierto')));
+    ws.once('error', () => res());
+  });
+});
+
+test('POST /hook con cuerpo > 64 KB da 413', async () => {
+  const { srv } = await setup();
+  expect(await http(srv.port, 'POST', '/hook', { 'x-colmena-token': TOKEN }, 'x'.repeat(70_000))).toBe(413);
+});
