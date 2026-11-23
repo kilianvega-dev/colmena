@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SessionManager } from '../server/sessions.ts';
+import { SessionManager, cleanEnv } from '../server/sessions.ts';
 import type { PtyLike, Spawn } from '../server/sessions.ts';
 
 function setup() {
@@ -155,4 +155,25 @@ test('remove y close con kill que lanza no propagan y remove emite removed', () 
   expect(() => m.close(a.id)).not.toThrow();
   expect(() => m.remove(a.id)).not.toThrow();
   expect(ids).toEqual([a.id]);
+});
+
+test('cleanEnv quita variables de la sesión anfitriona y conserva las de usuario', () => {
+  const env = {
+    CLAUDECODE: '1', CLAUDE_CODE_CHILD_SESSION: '1', CLAUDE_CODE_MESSAGING_TOKEN: 't',
+    CLAUDE_AGENT_SDK_VERSION: '1', CLAUDE_CODE_USE_BEDROCK: '1', PATH: 'p',
+  };
+  expect(cleanEnv(env)).toEqual({ CLAUDE_CODE_USE_BEDROCK: '1', PATH: 'p' });
+});
+
+test('create no hereda CLAUDECODE en el env del hijo', () => {
+  const { m, calls, tmp } = setup();
+  process.env.CLAUDECODE = '1';
+  try {
+    m.create('claude', tmp);
+    m.create('terminal', tmp);
+  } finally {
+    delete process.env.CLAUDECODE;
+  }
+  expect(calls[0].opts.env.CLAUDECODE).toBeUndefined();
+  expect(calls[1].opts.env.CLAUDECODE).toBeUndefined();
 });

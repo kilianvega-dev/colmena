@@ -2,3 +2,7 @@
 @import "@xterm/xterm/css/xterm.css";
 
 html, body, #root { height: 100%; margin: 0; }
+
+@keyframes pulse-border { 50% { box-shadow: 0 0 0 3px rgb(16 185 129 / 0.6); } }
+.waiting { animation: pulse-border 1.5s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .waiting { animation: none; } }

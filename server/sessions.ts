@@ -35,6 +35,23 @@ interface Opts {
   shell: string;
 }
 
+const KEEP = new Set([
+  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY',
+  'CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'CLAUDE_CODE_GIT_BASH_PATH', 'CLAUDE_CODE_SHELL',
+]);
+
+// Quita las variables de la sesión de Claude que lanzó a Colmena (marcan hijo y filtran tokens).
+export function cleanEnv(env: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    const drop = k === 'CLAUDECODE' || k === 'CLAUDE_PID' || k === 'CLAUDE_EFFORT' ||
+      k.startsWith('CLAUDE_AGENT_SDK_') || k.startsWith('CLAUDE_PREVIEW_') ||
+      (k.startsWith('CLAUDE_CODE_') && !KEEP.has(k));
+    if (!drop) out[k] = v;
+  }
+  return out;
+}
+
 export class SessionManager extends EventEmitter {
   private sessions = new Map<string, Entry>();
   private opts: Opts;
@@ -154,8 +171,9 @@ export class SessionManager extends EventEmitter {
   private launch(entry: Entry, resuming: boolean): void {
     const { id, kind, cwd } = entry.info;
     const { spawn, hooksPath, port, token, claudeBin, shell } = this.opts;
-    const env: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+    const raw: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (v !== undefined) raw[k] = v;
+    const env = cleanEnv(raw);
     env.COLMENA_PORT = String(port);
     env.COLMENA_TOKEN = token;
     env.COLMENA_SESSION = id;

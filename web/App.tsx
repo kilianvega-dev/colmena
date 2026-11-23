@@ -1,5 +1,7 @@
-import { Fragment, useEffect } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { Group, Panel as ResizablePanel, Separator } from 'react-resizable-panels';
+import { NewSessionDialog } from './NewSessionDialog.tsx';
+import { notifyWaiting, titleFor, waitingCount } from './notify.ts';
 import { Panel } from './Panel.tsx';
 import { useColmena } from './useColmena.ts';
 
@@ -12,11 +14,20 @@ function rowsOf<T>(items: T[]): T[][] {
 }
 
 export function App() {
-  const { sessions, order, connected, send, subscribe, lastError, dismissError } = useColmena();
+  const { sessions, order, recents, connected, send, subscribe, lastError, dismissError } = useColmena();
 
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const closeDialog = useCallback(() => setDialogOpen(false), []);
+  const prev = useRef<Map<string, string> | null>(null);
+
+  useEffect(() => { document.title = titleFor(waitingCount(sessions)); }, [sessions]);
+
+  // Solo suena al pasar a esperando; la primera carga (prev null) o una sesión nueva ya esperando no cuenta.
   useEffect(() => {
-    if (import.meta.env.DEV) (window as unknown as { colmena: unknown }).colmena = { send };
-  }, [send]);
+    const before = prev.current;
+    if (before) for (const s of sessions) if (s.status === 'esperando' && before.get(s.id) !== undefined && before.get(s.id) !== 'esperando') notifyWaiting(s);
+    if (connected || sessions.length) prev.current = new Map(sessions.map((s) => [s.id, s.status]));
+  }, [sessions, connected]);
 
   const byId = new Map(sessions.map((s) => [s.id, s]));
   const ids = [...order.filter((id) => byId.has(id)), ...sessions.map((s) => s.id).filter((id) => !order.includes(id))];
@@ -25,6 +36,18 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 bg-neutral-900 px-3 py-1">
+        <span className="flex-1 text-sm font-medium">Colmena</span>
+        <button
+          className="rounded bg-emerald-700 px-3 py-0.5 text-sm hover:bg-emerald-600"
+          onClick={() => { dismissError(); setDialogOpen(true); }}
+        >
+          Nueva sesión
+        </button>
+      </div>
+      {dialogOpen && (
+        <NewSessionDialog recents={recents} send={send} error={lastError} sessionCount={sessions.length} onClose={closeDialog} />
+      )}
       {(!connected || lastError) && (
         <div className="flex items-center bg-red-900 px-3 py-1 text-sm">
           <span className="flex-1">{!connected ? 'Sin conexión con el servidor, reintentando…' : lastError}</span>

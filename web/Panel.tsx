@@ -51,7 +51,7 @@ export function Panel({ session, send, subscribe }: Props) {
   const btn = 'rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700';
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded border border-neutral-800">
+    <div className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
       <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm">
         <span className="truncate font-medium" title={cwd}>{name}</span>
         <span className="text-neutral-400">{kind === 'claude' ? 'Claude' : 'Terminal'}</span>

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +15,18 @@ const port = Number(process.env.COLMENA_PORT ?? 4777);
 const stateFile = join(dataDir, 'state.json');
 const token = randomBytes(24).toString('hex');
 
+// node-pty en Windows no resuelve el PATH: hay que darle la ruta completa.
+function resolveOnPath(name: string): string {
+  try {
+    const lines = execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', [name], { encoding: 'utf8' })
+      .split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const found = lines.find((l) => l.toLowerCase().endsWith('.exe')) ?? lines[0];
+    if (found) return found;
+  } catch { /* no está en el PATH */ }
+  console.error('No se encontró claude en el PATH. Instala Claude Code o define COLMENA_CLAUDE.');
+  return name;
+}
+
 const spawn: Spawn = (file, args, { cwd, env, cols, rows }) =>
   pty.spawn(file, args, { name: 'xterm-256color', cwd, env, cols, rows, useConpty: true });
 
@@ -24,7 +37,7 @@ const manager = new SessionManager({
   hooksPath,
   port,
   token,
-  claudeBin: 'claude',
+  claudeBin: process.env.COLMENA_CLAUDE ?? resolveOnPath('claude'),
   shell: process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL ?? 'sh'),
 });
 manager.restore(state.sessions);
