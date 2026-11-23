@@ -66,9 +66,10 @@ let closing = false;
 const shutdown = async () => {
   if (closing) return;
   closing = true;
-  manager.killAll();
+  await manager.killAll();
   await srv.close(); // también guarda el estado
   process.exit(0);
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+process.on('SIGHUP', shutdown);

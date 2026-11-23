@@ -15,6 +15,10 @@ export function useColmena() {
   const listeners = useRef(new Map<string, Set<Listener>>());
   // El replay llega antes de que el Panel exista: se guarda para entregarlo al suscribirse.
   const buffers = useRef(new Map<string, string>());
+  const sessionsRef = useRef<SessionInfo[]>([]);
+  sessionsRef.current = sessions;
+  // "Abrir de nuevo": el panel viejo se quita cuando aparece la sesión nueva.
+  const replacing = useRef<{ id: string; count: number } | null>(null);
 
   useEffect(() => {
     let closed = false;
@@ -31,6 +35,10 @@ export function useColmena() {
         const m = JSON.parse(String(ev.data)) as ServerMessage;
         switch (m.type) {
           case 'snapshot':
+            if (replacing.current && m.sessions.length > replacing.current.count) {
+              sock.send(JSON.stringify({ type: 'remove', id: replacing.current.id }));
+              replacing.current = null;
+            }
             setSessions(m.sessions); setOrder(m.order); setRecents(m.recents);
             break;
           case 'session':
@@ -52,6 +60,7 @@ export function useColmena() {
             setOrder((o) => o.filter((x) => x !== m.id));
             break;
           case 'error':
+            replacing.current = null;
             setLastError(m.message);
             clearTimeout(errTimer.current);
             errTimer.current = setTimeout(() => setLastError(null), 6000);
@@ -67,6 +76,11 @@ export function useColmena() {
     if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(JSON.stringify(m));
   }, []);
 
+  const reopen = useCallback((id: string, cwd: string) => {
+    replacing.current = { id, count: sessionsRef.current.length };
+    send({ type: 'create', kind: 'terminal', cwd });
+  }, [send]);
+
   const subscribe = useCallback((id: string, cb: Listener) => {
     let set = listeners.current.get(id);
     if (!set) listeners.current.set(id, (set = new Set()));
@@ -79,5 +93,5 @@ export function useColmena() {
 
   const dismissError = useCallback(() => { clearTimeout(errTimer.current); setLastError(null); }, []);
 
-  return { sessions, order, recents, connected, send, subscribe, lastError, dismissError };
+  return { sessions, order, recents, connected, send, reopen, subscribe, lastError, dismissError };
 }

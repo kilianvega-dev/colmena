@@ -48,7 +48,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
 
   let timer: NodeJS.Timeout | null = null;
   const persist = async () => {
-    const sessions = manager.list().map(({ id, kind, cwd }) => ({ id, kind, cwd }));
+    const sessions = manager.list().map(({ id, kind, cwd }) => ({ id, kind, cwd, resumeId: manager.getResumeId(id) }));
     await saveState(stateFile, { sessions, order, recents }).catch((e) => console.error('No se pudo guardar el estado:', e));
   };
   const schedule = () => {
@@ -63,6 +63,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
     broadcast({ type: 'session', session });
     schedule();
   });
+  manager.on('reset', (id) => broadcast({ type: 'replay', id, data: '' }));
   manager.on('output', (id, data) => broadcast({ type: 'output', id, data }));
   manager.on('removed', (id) => {
     order = order.filter((x) => x !== id);
@@ -74,6 +75,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
     try {
       switch (msg.type) {
         case 'create': {
+          if ((msg.kind !== 'claude' && msg.kind !== 'terminal') || typeof msg.cwd !== 'string') throw new Error('Solicitud no válida');
           manager.create(msg.kind, msg.cwd);
           recents = addRecent(recents, msg.cwd);
           broadcast(snapshot());
@@ -160,8 +162,9 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
       try {
         parsed = parseHookPayload(JSON.parse(Buffer.concat(chunks).toString()));
       } catch {}
-      if (!parsed) return end(res, 400);
-      end(res, manager.applyHook(parsed.sessionId, parsed.event) ? 204 : 404);
+      const colmenaId = String(req.headers['x-colmena-session'] ?? '');
+      if (!parsed || !colmenaId) return end(res, 400);
+      end(res, manager.applyHook(colmenaId, parsed.event, parsed.sessionId) ? 204 : 404);
     });
   }
 

@@ -82,15 +82,18 @@ test('resume de claude cerrada usa --resume; terminal lanza error', () => {
   expect(m.replay(c.id)).toBe('');
 });
 
-test('la salida queda en replay y killAll mata los vivos', () => {
+test('la salida queda en replay y killAll mata los vivos', async () => {
   const { m, ptys, tmp } = setup();
   const a = m.create('claude', tmp);
   m.create('terminal', tmp);
   ptys[0].emitData('hola');
   expect(m.replay(a.id)).toBe('hola');
-  m.killAll();
+  const done = m.killAll();
   expect(ptys[0].kill).toHaveBeenCalled();
   expect(ptys[1].kill).toHaveBeenCalled();
+  ptys[0].emitExit({ exitCode: 0 });
+  ptys[1].emitExit({ exitCode: 0 });
+  await done; // resuelve al llegar todos los onExit
 });
 
 test('restore registra cerradas sin lanzar; remove emite removed', () => {
@@ -176,4 +179,40 @@ test('create no hereda CLAUDECODE en el env del hijo', () => {
   }
   expect(calls[0].opts.env.CLAUDECODE).toBeUndefined();
   expect(calls[1].opts.env.CLAUDECODE).toBeUndefined();
+});
+
+test('SessionEnd no cierra la sesión', () => {
+  const { m, tmp } = setup();
+  const info = m.create('claude', tmp);
+  m.applyHook(info.id, 'UserPromptSubmit');
+  m.applyHook(info.id, 'SessionEnd');
+  expect(m.list()[0].status).toBe('trabajando');
+});
+
+test('resume usa el último session_id reportado por Claude', () => {
+  const { m, calls, ptys, tmp } = setup();
+  const info = m.create('claude', tmp);
+  m.applyHook(info.id, 'UserPromptSubmit', 'otro-uuid');
+  m.close(info.id);
+  ptys[0].emitExit({ exitCode: 0 });
+  m.resume(info.id);
+  expect(calls[1].args.slice(0, 2)).toEqual(['--resume', 'otro-uuid']);
+});
+
+test('resume con pty vivo lanza y no llama a spawn', () => {
+  const { m, calls, tmp } = setup();
+  const info = m.create('claude', tmp);
+  expect(() => m.resume(info.id)).toThrow('La sesión sigue abierta');
+  expect(calls).toHaveLength(1);
+});
+
+test('sin CLAUDECODE se respeta todo el entorno del usuario', () => {
+  const { m, calls, tmp } = setup();
+  process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+  try {
+    m.create('claude', tmp);
+  } finally {
+    delete process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC;
+  }
+  expect(calls[0].opts.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1');
 });

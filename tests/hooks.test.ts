@@ -25,7 +25,7 @@ function runRelay(port: number | string, stdin: string) {
 }
 
 describe('writeHooksFile', () => {
-  it('escribe los 6 eventos con el comando del relay', async () => {
+  it('escribe los 7 eventos con el comando del relay', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'colmena-'));
     const file = await writeHooksFile(join(dir, 'data'));
     const json = JSON.parse(await readFile(file, 'utf8'));
@@ -55,11 +55,13 @@ describe('parseHookPayload', () => {
 describe('hook-relay.cjs', () => {
   it('reenvía cuerpo y token al servidor', async () => {
     let got = { body: '', token: '' };
+    let gotSession = 'x';
     const server = createServer((req, res) => {
       let body = '';
       req.on('data', (d) => (body += d));
       req.on('end', () => {
         got = { body, token: String(req.headers['x-colmena-token']) };
+        gotSession = String(req.headers['x-colmena-session']);
         res.end('ok');
       });
     });
@@ -71,6 +73,7 @@ describe('hook-relay.cjs', () => {
     expect(r.code).toBe(0);
     expect(r.out).toBe('');
     expect(got).toEqual({ body: payload, token: 'tok' });
+    expect(gotSession).toBe('');
   });
 
   it('sale con 0 y rápido sin servidor', async () => {

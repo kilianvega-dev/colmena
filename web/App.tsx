@@ -14,7 +14,7 @@ function rowsOf<T>(items: T[]): T[][] {
 }
 
 export function App() {
-  const { sessions, order, recents, connected, send, subscribe, lastError, dismissError } = useColmena();
+  const { sessions, order, recents, connected, send, reopen, subscribe, lastError, dismissError } = useColmena();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const closeDialog = useCallback(() => setDialogOpen(false), []);
@@ -68,7 +68,7 @@ export function App() {
                     <Fragment key={s.id}>
                       {j > 0 && <Separator className={`w-1 ${sep}`} />}
                       <ResizablePanel id={s.id} minSize="10%">
-                        <Panel session={s} send={send} subscribe={subscribe} />
+                        <Panel session={s} send={send} reopen={reopen} subscribe={subscribe} />
                       </ResizablePanel>
                     </Fragment>
                   ))}

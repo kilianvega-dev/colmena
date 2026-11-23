@@ -70,10 +70,15 @@ async function client(port: number, origin = `http://127.0.0.1:${port}`) {
 test('POST /hook: 401, 400, 404, 204 y el servidor sigue vivo', async () => {
   const { manager, srv, tmp } = await setup();
   const info = manager.create('claude', tmp);
-  const h = { 'x-colmena-token': TOKEN };
+  const h = { 'x-colmena-token': TOKEN, 'x-colmena-session': info.id };
+  const hn = { 'x-colmena-token': TOKEN, 'x-colmena-session': 'nada' };
   expect(await http(srv.port, 'POST', '/hook', {}, '{}')).toBe(401);
   expect(await http(srv.port, 'POST', '/hook', h, '{roto')).toBe(400);
-  expect(await http(srv.port, 'POST', '/hook', h, JSON.stringify({ session_id: 'nada', hook_event_name: 'Stop' }))).toBe(404);
+  expect(await http(srv.port, 'POST', '/hook', hn, JSON.stringify({ session_id: 'nada', hook_event_name: 'Stop' }))).toBe(404);
+  expect(await http(srv.port, 'POST', '/hook', { 'x-colmena-token': TOKEN }, JSON.stringify({ session_id: info.id, hook_event_name: 'Stop' }))).toBe(400);
+  // /clear: Claude reporta otro session_id, la sesión se identifica por la cabecera
+  expect(await http(srv.port, 'POST', '/hook', h, JSON.stringify({ session_id: 'otro', hook_event_name: 'UserPromptSubmit' }))).toBe(204);
+  expect(manager.list()[0].status).toBe('trabajando');
   expect(await http(srv.port, 'POST', '/hook', h, JSON.stringify({ session_id: info.id, hook_event_name: 'Stop' }))).toBe(204);
   expect(manager.list()[0].status).toBe('terminado');
   expect(await http(srv.port, 'GET', '/')).toBe(404);
@@ -136,4 +141,13 @@ test('upgrade con Host ajeno se rechaza', async () => {
 test('POST /hook con cuerpo > 64 KB da 413', async () => {
   const { srv } = await setup();
   expect(await http(srv.port, 'POST', '/hook', { 'x-colmena-token': TOKEN }, 'x'.repeat(70_000))).toBe(413);
+});
+
+test('create con kind o cwd inválidos da Solicitud no válida', async () => {
+  const { srv } = await setup();
+  const a = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'x', cwd: tmpdir() }));
+  const e = await a.waitFor((m) => m.type === 'error');
+  expect(e.message).toBe('Solicitud no válida');
 });

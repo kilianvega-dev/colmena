@@ -16,10 +16,11 @@ const STATUS_COLOR: Record<string, string> = {
 interface Props {
   session: SessionInfo;
   send: (m: ClientMessage) => void;
+  reopen: (id: string, cwd: string) => void;
   subscribe: (id: string, cb: (data: string, replay: boolean) => void) => () => void;
 }
 
-export function Panel({ session, send, subscribe }: Props) {
+export function Panel({ session, send, reopen, subscribe }: Props) {
   const { id, kind, cwd, status } = session;
   const box = useRef<HTMLDivElement>(null);
 
@@ -63,7 +64,7 @@ export function Panel({ session, send, subscribe }: Props) {
         {status === 'cerrado' && kind === 'terminal' && (
           <button
             className={btn}
-            onClick={() => { send({ type: 'create', kind: 'terminal', cwd }); send({ type: 'remove', id }); }}
+            onClick={() => reopen(id, cwd)}
           >
             Abrir de nuevo
           </button>

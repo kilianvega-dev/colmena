@@ -6,10 +6,10 @@ const porEvento = new Map<string, SessionStatus>([
   ['PreToolUse', 'trabajando'],
   ['Notification', 'esperando'],
   ['Stop', 'terminado'],
-  ['SessionEnd', 'cerrado'],
+  ['PostToolUse', 'trabajando'],
 ]);
 
-// cerrado solo sale con "reanudar" (Tarea 6), así que los hooks no lo cambian
+// cerrado lo pone solo la salida del pty (no SessionEnd: /clear lo dispara con Claude vivo); solo sale con "reanudar" (Tarea 6), así que los hooks no lo cambian
 export function nextStatus(current: SessionStatus, hookEvent: string): SessionStatus {
   if (current === 'cerrado') return 'cerrado';
   return porEvento.get(hookEvent) ?? current;

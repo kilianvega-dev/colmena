@@ -12,6 +12,7 @@ npm start
 Abre http://127.0.0.1:4777 (puerto cambiable con `COLMENA_PORT`). Con "Nueva sesión" eliges Claude o Terminal y una carpeta (recientes o ruta pegada). Cuando una sesión pasa a `esperando` suena un bip, el panel se resalta y el título de la pestaña muestra `(n) Colmena`.
 
 Para desarrollo: `npm run dev` (servidor + Vite en http://localhost:5173).
+En `npm run dev`, cada reinicio de `node --watch` corta el servidor sin pasar por el apagado limpio, y las terminales abiertas pueden quedar vivas. Para uso diario usa `npm start`.
 
 ## Cómo funcionan los hooks
 

@@ -21,6 +21,7 @@ process.stdin.on('end', () => {
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(body),
           'x-colmena-token': process.env.COLMENA_TOKEN || '',
+          'x-colmena-session': process.env.COLMENA_SESSION || '',
         },
       },
       (res) => {

@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import type { SessionInfo } from './protocol.ts';
 
 export interface SavedState {
-  sessions: Omit<SessionInfo, 'status' | 'exitCode'>[];
+  sessions: (Omit<SessionInfo, 'status' | 'exitCode'> & { resumeId?: string })[];
   order: string[];
   recents: string[];
 }

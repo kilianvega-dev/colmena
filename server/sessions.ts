@@ -24,6 +24,7 @@ interface Entry {
   info: SessionInfo;
   pty: PtyLike | null;
   buffer: RingBuffer;
+  resumeId?: string; // último session_id que reportó Claude (cambia con /clear)
 }
 
 interface Opts {
@@ -83,7 +84,10 @@ export class SessionManager extends EventEmitter {
     const entry = this.sessions.get(id);
     if (!entry) throw new Error('Sesión desconocida');
     if (entry.info.kind !== 'claude') throw new Error('Solo se pueden reanudar sesiones de Claude');
+    if (entry.pty) throw new Error('La sesión sigue abierta');
     if (entry.info.status !== 'cerrado') throw new Error('La sesión no está cerrada');
+    entry.buffer = new RingBuffer(200_000);
+    this.emit('reset', id);
     entry.info.status = 'iniciando';
     entry.info.exitCode = null;
     try {
@@ -98,20 +102,22 @@ export class SessionManager extends EventEmitter {
   }
 
   restore(saved: SavedState['sessions']): void {
-    for (const s of saved) {
+    for (const { resumeId, ...s } of saved) {
       const entry: Entry = {
         info: { ...s, status: 'cerrado', exitCode: null },
         pty: null,
         buffer: new RingBuffer(200_000),
+        resumeId,
       };
       this.sessions.set(s.id, entry);
       this.emitSession(entry);
     }
   }
 
-  applyHook(sessionId: string, event: string): boolean {
-    const entry = this.sessions.get(sessionId);
+  applyHook(colmenaId: string, event: string, claudeSessionId?: string): boolean {
+    const entry = this.sessions.get(colmenaId);
     if (!entry) return false;
+    if (claudeSessionId) entry.resumeId = claudeSessionId;
     const next = nextStatus(entry.info.status, event);
     if (next !== entry.info.status) {
       entry.info.status = next;
@@ -152,8 +158,34 @@ export class SessionManager extends EventEmitter {
     this.emit('removed', id);
   }
 
-  killAll(): void {
-    for (const e of this.sessions.values()) e.pty?.kill();
+  getResumeId(id: string): string | undefined {
+    return this.sessions.get(id)?.resumeId;
+  }
+
+  // En ConPTY kill() mata el árbol de forma asíncrona: espera los onExit (máx. 5 s).
+  killAll(): Promise<void> {
+    const pending = new Set<string>();
+    for (const [id, e] of this.sessions) {
+      if (!e.pty) continue;
+      try {
+        e.pty.kill();
+        pending.add(id);
+      } catch {}
+    }
+    if (!pending.size) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(t);
+        this.off('exited', onExited);
+        resolve();
+      };
+      const onExited = (id: string) => {
+        pending.delete(id);
+        if (!pending.size) finish();
+      };
+      const t = setTimeout(finish, 5000);
+      this.on('exited', onExited);
+    });
   }
 
   list(): SessionInfo[] {
@@ -173,13 +205,13 @@ export class SessionManager extends EventEmitter {
     const { spawn, hooksPath, port, token, claudeBin, shell } = this.opts;
     const raw: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) if (v !== undefined) raw[k] = v;
-    const env = cleanEnv(raw);
+    const env = process.env.CLAUDECODE ? cleanEnv(raw) : raw; // solo limpia si Colmena nació dentro de Claude
     env.COLMENA_PORT = String(port);
     env.COLMENA_TOKEN = token;
     env.COLMENA_SESSION = id;
     const [file, args] =
       kind === 'claude'
-        ? [claudeBin, [resuming ? '--resume' : '--session-id', id, '--settings', hooksPath]]
+        ? [claudeBin, [resuming ? '--resume' : '--session-id', resuming ? (entry.resumeId ?? id) : id, '--settings', hooksPath]]
         : [shell, []];
     const pty = spawn(file, args, { cwd, env, cols: 120, rows: 30 });
     entry.pty = pty;
@@ -194,6 +226,7 @@ export class SessionManager extends EventEmitter {
       entry.info.status = 'cerrado';
       entry.info.exitCode = exitCode;
       this.emitSession(entry);
+      this.emit('exited', id);
     });
   }
 }
