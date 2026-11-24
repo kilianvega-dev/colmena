@@ -86,8 +86,6 @@ export class SessionManager extends EventEmitter {
     if (entry.info.kind !== 'claude') throw new Error('Solo se pueden reanudar sesiones de Claude');
     if (entry.pty) throw new Error('La sesión sigue abierta');
     if (entry.info.status !== 'cerrado') throw new Error('La sesión no está cerrada');
-    entry.buffer = new RingBuffer(200_000);
-    this.emit('reset', id);
     entry.info.status = 'iniciando';
     entry.info.exitCode = null;
     try {
@@ -97,6 +95,9 @@ export class SessionManager extends EventEmitter {
       this.emitSession(entry);
       throw e;
     }
+    // la salida del pty nuevo llega en un tick posterior, así que el búfer limpio la recibe entera
+    entry.buffer = new RingBuffer(200_000);
+    this.emit('reset', id);
     this.emitSession(entry);
     return { ...entry.info };
   }
