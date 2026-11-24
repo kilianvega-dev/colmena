@@ -216,3 +216,39 @@ test('sin CLAUDECODE se respeta todo el entorno del usuario', () => {
   }
   expect(calls[0].opts.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBe('1');
 });
+
+// #1
+test('un resumeId nuevo emite session aunque el estado no cambie', () => {
+  const { m, tmp } = setup();
+  const info = m.create('claude', tmp);
+  m.applyHook(info.id, 'UserPromptSubmit', 'a');
+  const seen: unknown[] = [];
+  m.on('session', (s) => seen.push(s));
+  m.applyHook(info.id, 'PreToolUse', 'b');
+  expect(seen).toHaveLength(1);
+  m.applyHook(info.id, 'PreToolUse', 'b');
+  expect(seen).toHaveLength(1);
+});
+
+// #2
+test('killAll no espera a una sesión quitada durante el apagado', async () => {
+  const { m, tmp } = setup();
+  const info = m.create('terminal', tmp);
+  const t0 = Date.now();
+  const done = m.killAll();
+  m.remove(info.id);
+  await done;
+  expect(Date.now() - t0).toBeLessThan(1000);
+});
+
+// #3
+test('resume que falla conserva la salida anterior', () => {
+  const { m, ptys, tmp } = setup();
+  const info = m.create('claude', tmp);
+  ptys[0].emitData('salida vieja');
+  m.close(info.id);
+  ptys[0].emitExit({ exitCode: 0 });
+  (m as any).opts.spawn = () => { throw new Error('spawn falló'); };
+  expect(() => m.resume(info.id)).toThrow('spawn falló');
+  expect(m.replay(info.id)).toBe('salida vieja');
+});

@@ -179,6 +179,7 @@ export class SessionManager extends EventEmitter {
       const finish = () => {
         clearTimeout(t);
         this.off('exited', onExited);
+        this.off('removed', onExited);
         resolve();
       };
       const onExited = (id: string) => {
@@ -187,6 +188,7 @@ export class SessionManager extends EventEmitter {
       };
       const t = setTimeout(finish, 5000);
       this.on('exited', onExited);
+      this.on('removed', onExited); // una sesión quitada ya no emitirá 'exited'
     });
   }
 
