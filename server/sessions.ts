@@ -117,9 +117,11 @@ export class SessionManager extends EventEmitter {
   applyHook(colmenaId: string, event: string, claudeSessionId?: string): boolean {
     const entry = this.sessions.get(colmenaId);
     if (!entry) return false;
+    // un resumeId nuevo también emite 'session' para que el servidor lo guarde
+    const newResumeId = !!claudeSessionId && claudeSessionId !== entry.resumeId;
     if (claudeSessionId) entry.resumeId = claudeSessionId;
     const next = nextStatus(entry.info.status, event);
-    if (next !== entry.info.status) {
+    if (next !== entry.info.status || newResumeId) {
       entry.info.status = next;
       this.emitSession(entry);
     }
