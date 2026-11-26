@@ -16,12 +16,16 @@ const STATUS_COLOR: Record<string, string> = {
 interface Props {
   session: SessionInfo;
   position: number; // 1-based; Alt+position lo enfoca (hasta 9)
+  onMove: (id: string, to: number) => void; // `to` es base 0
   send: (m: ClientMessage) => void;
   reopen: (id: string, cwd: string) => void;
   subscribe: (id: string, cb: (data: string, replay: boolean) => void) => () => void;
 }
 
-export function Panel({ session, position, send, reopen, subscribe }: Props) {
+const DRAG_TYPE = 'application/x-colmena-panel';
+
+export function Panel({ session, position, onMove, send, reopen, subscribe }: Props) {
+  const [dropTarget, setDropTarget] = useState(false);
   const { id, kind, cwd, status } = session;
   const box = useRef<HTMLDivElement>(null);
 
@@ -60,8 +64,35 @@ export function Panel({ session, position, send, reopen, subscribe }: Props) {
   const btn = 'rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700';
 
   return (
-    <div data-panel-id={id} className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
-      <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm">
+    <div
+      data-panel-id={id}
+      className={`flex h-full flex-col overflow-hidden rounded border ${dropTarget ? 'border-sky-400' : status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropTarget(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropTarget(false);
+      }}
+      onDrop={(e) => {
+        setDropTarget(false);
+        const dragged = e.dataTransfer.getData(DRAG_TYPE);
+        if (!dragged || dragged === id) return;
+        e.preventDefault();
+        onMove(dragged, position - 1);
+      }}
+    >
+      <div
+        draggable={!editing}
+        title="Arrastra para mover el panel (o Alt+Shift+←/→)"
+        className={`flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm ${editing ? '' : 'cursor-grab active:cursor-grabbing'}`}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(DRAG_TYPE, id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+      >
         {position <= 9 && (
           <kbd className="rounded border border-neutral-700 px-1 font-mono text-xs text-neutral-400" title={`Alt+${position} enfoca este panel`}>
             {position}

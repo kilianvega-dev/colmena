@@ -92,8 +92,12 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
           manager.rename(msg.id, msg.name);
           break;
         case 'reorder': {
+          if (!Array.isArray(msg.ids)) throw new Error('Solicitud no válida');
           const known = new Set(manager.list().map((s) => s.id));
-          order = msg.ids.filter((id) => known.has(id));
+          const wanted = msg.ids.filter((id) => known.has(id));
+          // las sesiones que el cliente no mandó van al final, para no perder ningún panel
+          order = [...wanted, ...[...known].filter((id) => !wanted.includes(id))];
+          broadcast(snapshot());
           schedule();
           break;
         }

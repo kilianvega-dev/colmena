@@ -173,3 +173,25 @@ test('rename con name que no es texto se rechaza', async () => {
   a.ws.send(JSON.stringify({ type: 'rename', id: sa.session.id, name: 42 }));
   await a.waitFor((m) => m.type === 'error');
 });
+
+test('reorder difunde el orden nuevo a todos los clientes', async () => {
+  const { srv, tmp } = await setup();
+  const a = await client(srv.port);
+  const b = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const s1 = await a.waitFor((m) => m.type === 'session');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const s2 = await a.waitFor((m) => m.type === 'session' && m.session.id !== s1.session.id);
+  const want = [s2.session.id, s1.session.id];
+  a.ws.send(JSON.stringify({ type: 'reorder', ids: want }));
+  await b.waitFor((m) => m.type === 'snapshot' && m.order.join() === want.join());
+});
+
+test('reorder con ids que no son lista se rechaza', async () => {
+  const { srv } = await setup();
+  const a = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'reorder', ids: 'x' }));
+  await a.waitFor((m) => m.type === 'error');
+});
