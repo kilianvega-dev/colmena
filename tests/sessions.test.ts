@@ -252,3 +252,35 @@ test('resume que falla conserva la salida anterior', () => {
   expect(() => m.resume(info.id)).toThrow('spawn falló');
   expect(m.replay(info.id)).toBe('salida vieja');
 });
+
+// #4
+test('rename pone el nombre, recorta espacios y emite session', () => {
+  const { m, tmp } = setup();
+  const info = m.create('terminal', tmp);
+  const seen: any[] = [];
+  m.on('session', (s) => seen.push(s));
+  m.rename(info.id, '  servidor dev  ');
+  expect(m.list()[0].name).toBe('servidor dev');
+  expect(seen.at(-1).name).toBe('servidor dev');
+});
+
+test('rename con nombre vacío vuelve al nombre de la carpeta', () => {
+  const { m, tmp } = setup();
+  const info = m.create('terminal', tmp);
+  m.rename(info.id, 'algo');
+  m.rename(info.id, '   ');
+  expect(m.list()[0].name).toBeUndefined();
+});
+
+test('rename corta nombres de más de 60 caracteres', () => {
+  const { m, tmp } = setup();
+  const info = m.create('terminal', tmp);
+  m.rename(info.id, 'x'.repeat(80));
+  expect(m.list()[0].name).toHaveLength(60);
+});
+
+test('restore conserva el nombre guardado', () => {
+  const { m, tmp } = setup();
+  m.restore([{ id: 'x', kind: 'claude', cwd: tmp, name: 'backend' }]);
+  expect(m.list()[0].name).toBe('backend');
+});
