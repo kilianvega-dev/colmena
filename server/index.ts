@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { randomBytes } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
