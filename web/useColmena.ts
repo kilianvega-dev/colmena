@@ -17,8 +17,9 @@ export function useColmena() {
   const buffers = useRef(new Map<string, string>());
   const sessionsRef = useRef<SessionInfo[]>([]);
   sessionsRef.current = sessions;
-  // "Abrir de nuevo": el panel viejo se quita cuando aparece la sesión nueva.
-  const replacing = useRef<{ id: string; count: number } | null>(null);
+  // "Abrir de nuevo": cuando aparece una sesión que no estaba antes, se quita el panel viejo
+  // y la nueva hereda su nombre. Se compara por id: otra pestaña también puede crear sesiones.
+  const replacing = useRef<{ id: string; known: Set<string>; name?: string } | null>(null);
 
   useEffect(() => {
     let closed = false;
@@ -35,9 +36,17 @@ export function useColmena() {
         const m = JSON.parse(String(ev.data)) as ServerMessage;
         switch (m.type) {
           case 'snapshot':
-            if (replacing.current && m.sessions.length > replacing.current.count) {
-              sock.send(JSON.stringify({ type: 'remove', id: replacing.current.id }));
-              replacing.current = null;
+            if (replacing.current) {
+              const r = replacing.current;
+              const fresh = m.sessions.find((s) => !r.known.has(s.id) && s.kind === 'terminal');
+              if (fresh) {
+                if (r.name) sock.send(JSON.stringify({ type: 'rename', id: fresh.id, name: r.name }));
+                // el panel nuevo ocupa el lugar del viejo en vez de ir al final
+                const ids = m.order.filter((x) => x !== fresh.id).map((x) => (x === r.id ? fresh.id : x));
+                sock.send(JSON.stringify({ type: 'reorder', ids }));
+                sock.send(JSON.stringify({ type: 'remove', id: r.id }));
+                replacing.current = null;
+              }
             }
             setSessions(m.sessions); setOrder(m.order); setRecents(m.recents);
             break;
@@ -77,7 +86,8 @@ export function useColmena() {
   }, []);
 
   const reopen = useCallback((id: string, cwd: string) => {
-    replacing.current = { id, count: sessionsRef.current.length };
+    const old = sessionsRef.current.find((s) => s.id === id);
+    replacing.current = { id, known: new Set(sessionsRef.current.map((s) => s.id)), name: old?.name };
     send({ type: 'create', kind: 'terminal', cwd });
   }, [send]);
 
