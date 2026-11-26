@@ -27,8 +27,7 @@ Con dos o tres sesiones de Claude abiertas en terminales distintas es fácil per
 ## Uso
 
 ```powershell
-npm install
-npm start
+npx claude-colmena
 ```
 
 Abre http://127.0.0.1:4777. Con **Nueva sesión** eliges Claude o Terminal y una carpeta, ya sea de las recientes o pegando la ruta. El puerto se cambia con la variable `COLMENA_PORT`.
@@ -56,6 +55,8 @@ servidor Node (node-pty)  ◄──── POST /hook ──── hook-relay.cjs
 ## Desarrollo
 
 ```powershell
+npm install
+npm start       # desde el código, sin npm
 npm run dev     # servidor + Vite en http://localhost:5173
 npm test        # pruebas con Vitest
 ```
