@@ -15,12 +15,13 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface Props {
   session: SessionInfo;
+  position: number; // 1-based; Alt+position lo enfoca (hasta 9)
   send: (m: ClientMessage) => void;
   reopen: (id: string, cwd: string) => void;
   subscribe: (id: string, cb: (data: string, replay: boolean) => void) => () => void;
 }
 
-export function Panel({ session, send, reopen, subscribe }: Props) {
+export function Panel({ session, position, send, reopen, subscribe }: Props) {
   const { id, kind, cwd, status } = session;
   const box = useRef<HTMLDivElement>(null);
 
@@ -59,8 +60,13 @@ export function Panel({ session, send, reopen, subscribe }: Props) {
   const btn = 'rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700';
 
   return (
-    <div className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
+    <div data-panel-id={id} className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
       <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm">
+        {position <= 9 && (
+          <kbd className="rounded border border-neutral-700 px-1 font-mono text-xs text-neutral-400" title={`Alt+${position} enfoca este panel`}>
+            {position}
+          </kbd>
+        )}
         {editing ? (
           <input
             autoFocus
