@@ -10,6 +10,12 @@ export interface SavedState {
 
 const empty = (): SavedState => ({ sessions: [], order: [], recents: [] });
 
+const isStr = (x: unknown): x is string => typeof x === 'string';
+// Un archivo editado a mano no debe tumbar el arranque: se descartan solo las entradas inválidas.
+const validSession = (s: any): s is SavedState['sessions'][number] =>
+  !!s && isStr(s.id) && isStr(s.cwd) && (s.kind === 'claude' || s.kind === 'terminal')
+  && (s.name === undefined || isStr(s.name)) && (s.resumeId === undefined || isStr(s.resumeId));
+
 export async function loadState(file: string): Promise<SavedState> {
   let raw: string;
   try {
@@ -19,7 +25,9 @@ export async function loadState(file: string): Promise<SavedState> {
   }
   try {
     const s = JSON.parse(raw);
-    if (Array.isArray(s?.sessions) && Array.isArray(s.order) && Array.isArray(s.recents)) return s;
+    if (Array.isArray(s?.sessions) && Array.isArray(s.order) && Array.isArray(s.recents)) {
+      return { sessions: s.sessions.filter(validSession), order: s.order.filter(isStr), recents: s.recents.filter(isStr) };
+    }
   } catch {}
   await copyFile(file, file + '.bak');
   return empty();

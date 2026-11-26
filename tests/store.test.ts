@@ -31,6 +31,17 @@ describe('store', () => {
     expect(await loadState(f)).toEqual({ sessions: [], order: [], recents: [] });
     expect(await readFile(f + '.bak', 'utf8')).toBe('{"sessions":1}');
   });
+  it('descarta sesiones mal formadas y conserva las buenas', async () => {
+    const f = await tmp();
+    await saveState(f, { sessions: [], order: [], recents: [] });
+    const good = { id: 'a', kind: 'claude', cwd: 'C:\\a', name: 'api', resumeId: 'r' };
+    await writeFile(f, JSON.stringify({
+      sessions: [good, { kind: 'claude', cwd: 'C:\\b' }, { id: 'c', kind: 'otro', cwd: 'C:\\c' }, { id: 'd', kind: 'terminal', cwd: 5 }, null],
+      order: ['a', 3],
+      recents: ['C:\\a', {}],
+    }));
+    expect(await loadState(f)).toEqual({ sessions: [good], order: ['a'], recents: ['C:\\a'] });
+  });
   it('addRecent', () => {
     expect(addRecent(['C:\\a', 'C:\\B'], 'c:\\b')).toEqual(['c:\\b', 'C:\\a']);
     const r = Array.from({ length: 11 }, (_, i) => 'C:\\d' + i).reduce<string[]>((a, c) => addRecent(a, c), []);
