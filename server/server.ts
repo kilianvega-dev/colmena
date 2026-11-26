@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { SessionManager } from './sessions.ts';
 import type { ClientMessage, ServerMessage } from './protocol.ts';
 import { parseHookPayload } from './hooks.ts';
-import { isAllowedHost, isAllowedOrigin } from './security.ts';
+import { isAllowedHost, isAllowedOrigin, sameToken } from './security.ts';
 import { addRecent, saveState } from './store.ts';
 
 interface Opts {
@@ -152,7 +152,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
   }
 
   function hook(req: IncomingMessage, res: ServerResponse) {
-    if (req.headers['x-colmena-token'] !== token) {
+    if (!sameToken(req.headers['x-colmena-token'], token)) {
       req.resume();
       return end(res, 401);
     }
