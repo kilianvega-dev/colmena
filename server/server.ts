@@ -48,7 +48,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
 
   let timer: NodeJS.Timeout | null = null;
   const persist = async () => {
-    const sessions = manager.list().map(({ id, kind, cwd }) => ({ id, kind, cwd, resumeId: manager.getResumeId(id) }));
+    const sessions = manager.list().map(({ id, kind, cwd, name }) => ({ id, kind, cwd, name, resumeId: manager.getResumeId(id) }));
     await saveState(stateFile, { sessions, order, recents }).catch((e) => console.error('No se pudo guardar el estado:', e));
   };
   const schedule = () => {
@@ -87,9 +87,17 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
         case 'remove': manager.remove(msg.id); break;
         case 'input': manager.write(msg.id, msg.data); break;
         case 'resize': manager.resize(msg.id, msg.cols, msg.rows); break;
+        case 'rename':
+          if (typeof msg.name !== 'string') throw new Error('Solicitud no válida');
+          manager.rename(msg.id, msg.name);
+          break;
         case 'reorder': {
+          if (!Array.isArray(msg.ids)) throw new Error('Solicitud no válida');
           const known = new Set(manager.list().map((s) => s.id));
-          order = msg.ids.filter((id) => known.has(id));
+          const wanted = msg.ids.filter((id) => known.has(id));
+          // las sesiones que el cliente no mandó van al final, para no perder ningún panel
+          order = [...wanted, ...[...known].filter((id) => !wanted.includes(id))];
+          broadcast(snapshot());
           schedule();
           break;
         }
