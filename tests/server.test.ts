@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
@@ -150,4 +150,87 @@ test('create con kind o cwd inválidos da Solicitud no válida', async () => {
   a.ws.send(JSON.stringify({ type: 'create', kind: 'x', cwd: tmpdir() }));
   const e = await a.waitFor((m) => m.type === 'error');
   expect(e.message).toBe('Solicitud no válida');
+});
+
+test('rename difunde el nombre a todos y lo guarda', async () => {
+  const { srv, tmp } = await setup();
+  const a = await client(srv.port);
+  const b = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const sa = await a.waitFor((m) => m.type === 'session');
+  b.ws.send(JSON.stringify({ type: 'rename', id: sa.session.id, name: 'api' }));
+  await a.waitFor((m) => m.type === 'session' && m.session.name === 'api');
+  await vi.waitFor(() => expect(readFileSync(join(tmp, 's.json'), 'utf8')).toContain('"name": "api"'), { timeout: 2000 });
+});
+
+test('rename con name que no es texto se rechaza', async () => {
+  const { srv, tmp } = await setup();
+  const a = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const sa = await a.waitFor((m) => m.type === 'session');
+  a.ws.send(JSON.stringify({ type: 'rename', id: sa.session.id, name: 42 }));
+  await a.waitFor((m) => m.type === 'error');
+});
+
+test('reorder difunde el orden nuevo a todos los clientes', async () => {
+  const { srv, tmp } = await setup();
+  const a = await client(srv.port);
+  const b = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const s1 = await a.waitFor((m) => m.type === 'session');
+  a.ws.send(JSON.stringify({ type: 'create', kind: 'terminal', cwd: tmp }));
+  const s2 = await a.waitFor((m) => m.type === 'session' && m.session.id !== s1.session.id);
+  const want = [s2.session.id, s1.session.id];
+  a.ws.send(JSON.stringify({ type: 'reorder', ids: want }));
+  await b.waitFor((m) => m.type === 'snapshot' && m.order.join() === want.join());
+});
+
+test('reorder con ids que no son lista se rechaza', async () => {
+  const { srv } = await setup();
+  const a = await client(srv.port);
+  await a.waitFor((m) => m.type === 'snapshot');
+  a.ws.send(JSON.stringify({ type: 'reorder', ids: 'x' }));
+  await a.waitFor((m) => m.type === 'error');
+});
+
+function get(port: number, path: string) {
+  return new Promise<{ status: number; body: string }>((resolve, reject) => {
+    const req = request({ host: '127.0.0.1', port, path, headers: { host: `127.0.0.1:${port}` } }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => resolve({ status: res.statusCode!, body }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+test('los estáticos no dejan salir de su carpeta (path traversal)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'colmena-static-'));
+  const site = join(root, 'dist');
+  mkdirSync(site);
+  writeFileSync(join(site, 'index.html'), '<p>colmena</p>');
+  writeFileSync(join(root, 'secreto.txt'), 'NO-DEBE-SALIR');
+  const manager = new SessionManager({ spawn: (() => { throw new Error('sin spawn'); }) as any, hooksPath: 'h.json', port: 0, token: TOKEN, claudeBin: 'c', shell: 's' });
+  const srv = await createServer({ manager, port: 0, token: TOKEN, staticDir: site, stateFile: join(root, 's.json'), recents: [] });
+  cleanups.push(srv.close);
+  expect((await get(srv.port, '/')).body).toContain('colmena');
+  for (const path of ['/../secreto.txt', '/%2e%2e/secreto.txt', '/..%5csecreto.txt', '/%2e%2e%2fsecreto.txt']) {
+    const res = await get(srv.port, path);
+    expect(res.body, path).not.toContain('NO-DEBE-SALIR');
+  }
+});
+
+test('el origen de Vite solo se acepta en modo desarrollo', async () => {
+  const { srv } = await setup();
+  await expect(client(srv.port, 'http://localhost:5173')).rejects.toThrow();
+  const tmp = mkdtempSync(join(tmpdir(), 'colmena-dev-'));
+  const manager = new SessionManager({ spawn: (() => { throw new Error('sin spawn'); }) as any, hooksPath: 'h.json', port: 0, token: TOKEN, claudeBin: 'c', shell: 's' });
+  const dev = await createServer({ manager, port: 0, token: TOKEN, staticDir: null, devPort: 5173, stateFile: join(tmp, 's.json'), recents: [] });
+  cleanups.push(dev.close);
+  const c = await client(dev.port, 'http://localhost:5173');
+  await c.waitFor((m) => m.type === 'snapshot');
 });

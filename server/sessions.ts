@@ -161,6 +161,15 @@ export class SessionManager extends EventEmitter {
     this.emit('removed', id);
   }
 
+  rename(id: string, name: string): void {
+    const entry = this.sessions.get(id);
+    if (!entry) return;
+    const clean = name.trim().slice(0, 60);
+    if (clean) entry.info.name = clean;
+    else delete entry.info.name;
+    this.emitSession(entry);
+  }
+
   getResumeId(id: string): string | undefined {
     return this.sessions.get(id)?.resumeId;
   }

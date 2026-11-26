@@ -1,4 +1,4 @@
-import { isAllowedHost, isAllowedOrigin } from '../server/security.ts';
+import { isAllowedHost, isAllowedOrigin, sameToken } from '../server/security.ts';
 
 describe('isAllowedHost', () => {
   it('acepta loopback con el puerto', () => {
@@ -26,4 +26,12 @@ describe('isAllowedOrigin', () => {
     for (const o of ['https://evil.com', undefined, 'null'])
       expect(isAllowedOrigin(o, 4777, 5173)).toBe(false);
   });
+});
+
+test('sameToken: igual pasa; distinto, otro largo o no-texto falla', () => {
+  expect(sameToken('abc123', 'abc123')).toBe(true);
+  expect(sameToken('abc124', 'abc123')).toBe(false);
+  expect(sameToken('abc', 'abc123')).toBe(false);
+  expect(sameToken(undefined, 'abc123')).toBe(false);
+  expect(sameToken(['abc123'], 'abc123')).toBe(false);
 });

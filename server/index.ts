@@ -12,6 +12,11 @@ import { createServer } from './server.ts';
 
 const dataDir = join(process.env.APPDATA ?? homedir(), 'colmena');
 const port = Number(process.env.COLMENA_PORT ?? 4777);
+// 0 elegiría un puerto al azar que los hooks no conocerían; NaN o fuera de rango rompe el listen.
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error(`COLMENA_PORT debe ser un número entre 1 y 65535 (recibido: "${process.env.COLMENA_PORT}").`);
+  process.exit(1);
+}
 const stateFile = join(dataDir, 'state.json');
 const token = randomBytes(24).toString('hex');
 

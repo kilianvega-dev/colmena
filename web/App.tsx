@@ -3,6 +3,7 @@ import { Group, Panel as ResizablePanel, Separator } from 'react-resizable-panel
 import { NewSessionDialog } from './NewSessionDialog.tsx';
 import { notifyWaiting, titleFor, waitingCount } from './notify.ts';
 import { Panel } from './Panel.tsx';
+import { moved, shortcutFor } from './shortcuts.ts';
 import { useColmena } from './useColmena.ts';
 
 // 1 -> 1x1, 2 -> 2x1, 3-4 -> 2x2, 5-6 -> 3x2, más -> 3 columnas.
@@ -31,6 +32,44 @@ export function App() {
 
   const byId = new Map(sessions.map((s) => [s.id, s]));
   const ids = [...order.filter((id) => byId.has(id)), ...sessions.map((s) => s.id).filter((id) => !order.includes(id))];
+
+  const idsRef = useRef(ids);
+  idsRef.current = ids;
+  // Mover un panel de fila lo vuelve a montar y pierde el foco: se recupera cuando llega el orden nuevo.
+  const refocus = useRef<string | null>(null);
+  const move = useCallback((id: string, to: number) => {
+    const next = moved(idsRef.current, id, to);
+    if (next.join() === idsRef.current.join()) return;
+    send({ type: 'reorder', ids: next });
+  }, [send]);
+  useEffect(() => {
+    if (!refocus.current) return;
+    document.querySelector<HTMLElement>(`[data-panel-id="${refocus.current}"] .xterm-helper-textarea`)?.focus();
+    refocus.current = null;
+  });
+  useEffect(() => {
+    // captura: corre antes que xterm, que se quedaría con la tecla
+    const onKey = (e: KeyboardEvent) => {
+      const sc = shortcutFor(e);
+      if (!sc) return;
+      if (sc.type === 'focus' && sc.index >= idsRef.current.length) return;
+      const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-panel-id]')?.dataset.panelId;
+      if (sc.type === 'move' && !focused) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (sc.type === 'new') {
+        dismissError();
+        setDialogOpen(true);
+      } else if (sc.type === 'move') {
+        refocus.current = focused!;
+        move(focused!, idsRef.current.indexOf(focused!) + sc.delta);
+      } else {
+        document.querySelector<HTMLElement>(`[data-panel-id="${idsRef.current[sc.index]}"] .xterm-helper-textarea`)?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [dismissError, move]);
   const rows = rowsOf(ids.map((id) => byId.get(id)!));
   const sep = 'bg-neutral-800 hover:bg-neutral-600';
 
@@ -40,6 +79,8 @@ export function App() {
         <span className="flex-1 text-sm font-medium">Colmena</span>
         <button
           className="rounded bg-emerald-700 px-3 py-0.5 text-sm hover:bg-emerald-600"
+          title="Alt+N"
+          aria-keyshortcuts="Alt+N"
           onClick={() => { dismissError(); setDialogOpen(true); }}
         >
           Nueva sesión
@@ -68,7 +109,7 @@ export function App() {
                     <Fragment key={s.id}>
                       {j > 0 && <Separator className={`w-1 ${sep}`} />}
                       <ResizablePanel id={s.id} minSize="10%">
-                        <Panel session={s} send={send} reopen={reopen} subscribe={subscribe} />
+                        <Panel session={s} position={ids.indexOf(s.id) + 1} onMove={move} send={send} reopen={reopen} subscribe={subscribe} />
                       </ResizablePanel>
                     </Fragment>
                   ))}

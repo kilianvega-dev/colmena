@@ -17,7 +17,7 @@ export function notifyWaiting(s: SessionInfo): void {
     osc.onended = () => void ctx.close();
   } catch { /* sin audio disponible */ }
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-    const name = s.cwd.split(/[\\/]/).filter(Boolean).pop() ?? s.cwd;
+    const name = s.name ?? s.cwd.split(/[\\/]/).filter(Boolean).pop() ?? s.cwd;
     new Notification('Colmena', { body: `${name} está esperando` });
   }
 }

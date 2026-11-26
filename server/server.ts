@@ -7,7 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { SessionManager } from './sessions.ts';
 import type { ClientMessage, ServerMessage } from './protocol.ts';
 import { parseHookPayload } from './hooks.ts';
-import { isAllowedHost, isAllowedOrigin } from './security.ts';
+import { isAllowedHost, isAllowedOrigin, sameToken } from './security.ts';
 import { addRecent, saveState } from './store.ts';
 
 interface Opts {
@@ -47,10 +47,13 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
   const snapshot = (): ServerMessage => ({ type: 'snapshot', sessions: manager.list(), order, recents });
 
   let timer: NodeJS.Timeout | null = null;
-  const persist = async () => {
-    const sessions = manager.list().map(({ id, kind, cwd }) => ({ id, kind, cwd, resumeId: manager.getResumeId(id) }));
+  // En cola: dos guardados a la vez (el de close() y uno programado) pisarían el mismo .tmp.
+  // Cada uno toma el estado al ejecutarse, así que el último escrito siempre es el más nuevo.
+  let saving = Promise.resolve();
+  const persist = () => (saving = saving.then(async () => {
+    const sessions = manager.list().map(({ id, kind, cwd, name }) => ({ id, kind, cwd, name, resumeId: manager.getResumeId(id) }));
     await saveState(stateFile, { sessions, order, recents }).catch((e) => console.error('No se pudo guardar el estado:', e));
-  };
+  }));
   const schedule = () => {
     timer ??= setTimeout(() => {
       timer = null;
@@ -87,9 +90,17 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
         case 'remove': manager.remove(msg.id); break;
         case 'input': manager.write(msg.id, msg.data); break;
         case 'resize': manager.resize(msg.id, msg.cols, msg.rows); break;
+        case 'rename':
+          if (typeof msg.name !== 'string') throw new Error('Solicitud no válida');
+          manager.rename(msg.id, msg.name);
+          break;
         case 'reorder': {
+          if (!Array.isArray(msg.ids)) throw new Error('Solicitud no válida');
           const known = new Set(manager.list().map((s) => s.id));
-          order = msg.ids.filter((id) => known.has(id));
+          const wanted = msg.ids.filter((id) => known.has(id));
+          // las sesiones que el cliente no mandó van al final, para no perder ningún panel
+          order = [...wanted, ...[...known].filter((id) => !wanted.includes(id))];
+          broadcast(snapshot());
           schedule();
           break;
         }
@@ -144,7 +155,7 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
   }
 
   function hook(req: IncomingMessage, res: ServerResponse) {
-    if (req.headers['x-colmena-token'] !== token) {
+    if (!sameToken(req.headers['x-colmena-token'], token)) {
       req.resume();
       return end(res, 401);
     }

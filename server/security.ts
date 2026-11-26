@@ -1,3 +1,13 @@
+import { timingSafeEqual } from 'node:crypto';
+
+// Tiempo constante: medir cuánto tarda la respuesta no ayuda a adivinar el token.
+export function sameToken(given: unknown, token: string): boolean {
+  if (typeof given !== 'string') return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 export function isAllowedHost(host: string | undefined, port: number): boolean {
   if (!host) return false;
   const h = host.toLowerCase();
