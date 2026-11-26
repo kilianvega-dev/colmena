@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import type { ClientMessage, SessionInfo } from '../server/protocol.ts';
@@ -15,12 +15,13 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface Props {
   session: SessionInfo;
+  position: number; // 1-based; Alt+position lo enfoca (hasta 9)
   send: (m: ClientMessage) => void;
   reopen: (id: string, cwd: string) => void;
   subscribe: (id: string, cb: (data: string, replay: boolean) => void) => () => void;
 }
 
-export function Panel({ session, send, reopen, subscribe }: Props) {
+export function Panel({ session, position, send, reopen, subscribe }: Props) {
   const { id, kind, cwd, status } = session;
   const box = useRef<HTMLDivElement>(null);
 
@@ -47,14 +48,50 @@ export function Panel({ session, send, reopen, subscribe }: Props) {
     return () => { ro.disconnect(); onData.dispose(); unsub(); term.dispose(); };
   }, [id, send, subscribe]);
 
-  const name = cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
+  const folder = cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
+  const name = session.name ?? folder;
+  const [editing, setEditing] = useState(false);
+  const commit = (value: string) => {
+    setEditing(false);
+    const v = value.trim();
+    if (v !== name) send({ type: 'rename', id, name: v === folder ? '' : v });
+  };
   const label = kind === 'terminal' ? (status === 'cerrado' ? 'cerrada' : 'abierta') : status;
   const btn = 'rounded bg-neutral-800 px-2 py-0.5 text-xs hover:bg-neutral-700';
 
   return (
-    <div className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
+    <div data-panel-id={id} className={`flex h-full flex-col overflow-hidden rounded border ${status === 'esperando' ? 'waiting border-emerald-500' : 'border-neutral-800'}`}>
       <div className="flex items-center gap-2 bg-neutral-900 px-2 py-1 text-sm">
-        <span className="truncate font-medium" title={cwd}>{name}</span>
+        {position <= 9 && (
+          <kbd className="rounded border border-neutral-700 px-1 font-mono text-xs text-neutral-400" title={`Alt+${position} enfoca este panel`}>
+            {position}
+          </kbd>
+        )}
+        {editing ? (
+          <input
+            autoFocus
+            defaultValue={name}
+            maxLength={60}
+            aria-label="Nombre del panel"
+            className="w-48 rounded border border-neutral-600 bg-neutral-950 px-1 font-medium"
+            onFocus={(e) => e.currentTarget.select()}
+            onBlur={(e) => commit(e.currentTarget.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') e.currentTarget.blur();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+          />
+        ) : (
+          <button
+            className="truncate font-medium hover:underline"
+            title={`${cwd}\nDoble clic o F2 para renombrar`}
+            aria-label={`${name}, renombrar panel`}
+            onDoubleClick={() => setEditing(true)}
+            onKeyDown={(e) => { if (e.key === 'F2' || e.key === 'Enter') setEditing(true); }}
+          >
+            {name}
+          </button>
+        )}
         <span className="text-neutral-400">{kind === 'claude' ? 'Claude' : 'Terminal'}</span>
         <span className={`rounded px-2 py-0.5 text-xs text-white ${STATUS_COLOR[label]}`}>{label}</span>
         <span className="flex-1" />

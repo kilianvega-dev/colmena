@@ -1,6 +1,6 @@
 export type SessionKind = 'claude' | 'terminal';
 export type SessionStatus = 'iniciando' | 'trabajando' | 'esperando' | 'terminado' | 'cerrado';
-export interface SessionInfo { id: string; kind: SessionKind; cwd: string; status: SessionStatus; exitCode: number | null; }
+export interface SessionInfo { id: string; kind: SessionKind; cwd: string; status: SessionStatus; exitCode: number | null; name?: string; }
 
 export type ClientMessage =
   | { type: 'create'; kind: SessionKind; cwd: string }
@@ -9,7 +9,8 @@ export type ClientMessage =
   | { type: 'remove'; id: string }     // quita el panel (mata si vive)
   | { type: 'input'; id: string; data: string }
   | { type: 'resize'; id: string; cols: number; rows: number }
-  | { type: 'reorder'; ids: string[] };
+  | { type: 'reorder'; ids: string[] }
+  | { type: 'rename'; id: string; name: string }; // nombre vacío = volver al de la carpeta
 
 export type ServerMessage =
   | { type: 'snapshot'; sessions: SessionInfo[]; order: string[]; recents: string[] }
