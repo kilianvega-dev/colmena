@@ -47,10 +47,13 @@ export async function createServer(opts: Opts): Promise<{ close(): Promise<void>
   const snapshot = (): ServerMessage => ({ type: 'snapshot', sessions: manager.list(), order, recents });
 
   let timer: NodeJS.Timeout | null = null;
-  const persist = async () => {
+  // En cola: dos guardados a la vez (el de close() y uno programado) pisarían el mismo .tmp.
+  // Cada uno toma el estado al ejecutarse, así que el último escrito siempre es el más nuevo.
+  let saving = Promise.resolve();
+  const persist = () => (saving = saving.then(async () => {
     const sessions = manager.list().map(({ id, kind, cwd, name }) => ({ id, kind, cwd, name, resumeId: manager.getResumeId(id) }));
     await saveState(stateFile, { sessions, order, recents }).catch((e) => console.error('No se pudo guardar el estado:', e));
-  };
+  }));
   const schedule = () => {
     timer ??= setTimeout(() => {
       timer = null;
